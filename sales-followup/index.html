@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Muzamal Sales Dashboard v4</title>
+    <script src="[cdnjs.cloudflare.com](https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js)"></script>
+    <script src="[cdn.jsdelivr.net](https://cdn.jsdelivr.net/npm/chart.js)"></script>
+    <link href="[fonts.googleapis.com](https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap)" rel="stylesheet">
+    <style>
+        /* ─── Design Tokens ─────────────────────────────────────────── */
+        :root {
+            --bg-body:    #f8fafc;
+            --bg-card:    #ffffff;
+            --text-main:  #0f172a;
+            --text-muted: #64748b;
+            --border:     #e2e8f0;
+            --primary:    #2563eb;
+            --danger:     #ef4444;
+            --success:    #10b981;
+        }
+
+        /* ─── Reset & Base ──────────────────────────────────────────── */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background: var(--bg-body); color: var(--text-main); padding: 20px; line-height: 1.5; }
+        .container { max-width: 1300px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+        /* ─── Header ────────────────────────────────────────────────── */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-card);
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        /* ─── Buttons ───────────────────────────────────────────────── */
+        .btn { padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; transition: 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: #1d4ed8; transform: translateY(-1px); }
+        .btn-export { background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        .btn-export:hover { background: #218838; }
+
+        /* ─── Stats ─────────────────────────────────────────────────── */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        .stat-card { background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
+        .stat-val { font-size: 1.8rem; font-weight: 700; margin-top: 5px; }
+
+        /* ─── Filters ───────────────────────────────────────────────── */
+        .filter-section {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+        }
+        #searchInput:focus { border-color: #007bff; box-shadow: 0 0 5px rgba(0,123,255,0.2); }
+
+        /* ─── Layout ────────────────────────────────────────────────── */
+        .main-content { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+        .card { background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border); padding: 24px; }
+
+        /* ─── Table ─────────────────────────────────────────────────── */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; table-layout: auto; }
+        th, td { padding: 16px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        th:last-child, td:last-child { text-align: right; width: 220px; white-space: nowrap; }
+        th { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .overdue-tag { color: var(--danger); font-weight: 700; font-size: 0.7rem; border: 1px solid var(--danger); padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
+
+        /* ─── Side Panel ────────────────────────────────────────────── */
+        .chart-container { height: 200px; margin-bottom: 24px; display: flex; justify-content: center; }
+        .activity-item { padding: 12px 0; border-bottom: 1px solid #f1f5f9; display: flex; gap: 12px; animation: slideIn 0.3s ease-out; }
+        .activity-dot { width: 8px; height: 8px; background: var(--primary); border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+        .activity-info h5 { font-size: 0.9rem; font-weight: 600; }
+        .activity-info p  { font-size: 0.8rem; color: var(--text-muted); }
+
+        /* ─── Modal ─────────────────────────────────────────────────── */
+        .modal { position: fixed; inset: 0; background: rgba(15,23,42,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-body { background: white; padding: 32px; border-radius: 16px; width: 450px; }
+        .input-group { margin-bottom: 16px; }
+        label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.85rem; color: var(--text-muted); }
+        input, select { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; }
+
+        /* ─── Animations ────────────────────────────────────────────── */
+        @keyframes slideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+
+        /* ─── Responsive ────────────────────────────────────────────── */
+        @media (max-width: 1000px) { .main-content { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<!-- ================================================================
+     LAYOUT
+     ================================================================ -->
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <div>
+            <h1>Sales Follow-up Dashboard</h1>
+            <p style="color: var(--text-muted);">Muzamal Holdings Sdn. Bhd.</p>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn btn-primary" onclick="toggleModal(true)">+ Add Follow-up</button>
+            <button class="btn-export" onclick="exportToExcel()">Excel Report</button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <span style="color: var(--text-muted)">Active Tasks</span>
+            <div class="stat-val" id="totalTasks">0</div>
+        </div>
+        <div class="stat-card" style="border-top: 4px solid var(--danger)">
+            <span style="color: var(--danger)">Overdue</span>
+            <div class="stat-val" style="color: var(--danger)" id="overdueCount">0</div>
+        </div>
+        <div class="stat-card" style="border-top: 4px solid var(--success)">
+            <span style="color: var(--success)">Completion Rate</span>
+            <div class="stat-val" id="ratePercent">0%</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-section">
+        <div style="flex: 2;">
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:5px; font-weight:600;">SEARCH CUSTOMER</label>
+            <input type="text" id="searchInput" placeholder="Type a name to search..."
+                   style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; outline:none; box-sizing:border-box;">
+        </div>
+        <div style="flex: 1;">
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:5px; font-weight:600;">FILTER BY OWNER</label>
+            <select id="ownerFilter" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; background:white; box-sizing:border-box;">
+                <option value="">All Owners</option>
+                <option value="Arif">Arif</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+        <!-- Schedule Table -->
+        <div class="card">
+            <h3>Schedule Queue</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:25%;">Date & Time</th>
+                        <th>Customer</th>
+                        <th style="width:15%;">Owner</th>
+                        <th>Type</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="taskBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Side Panel -->
+        <div class="side-panel">
+            <div class="card" style="margin-bottom: 20px;">
+                <h3>Visualization</h3>
+                <div class="chart-container">
+                    <canvas id="completionChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Recent Activity</h3>
+                <div class="activity-list" id="activityList"></div>
+            </div>
+        </div>
+
+    </div>
+</div><!-- /.container -->
+
+<!-- ================================================================
+     MODAL — Add / Edit Follow-up
+     ================================================================ -->
+<div class="modal" id="taskModal">
+    <div class="modal-body">
+        <h2 id="modalTitle" style="margin-bottom: 20px;">New Follow-up</h2>
+        <input type="hidden" id="editTaskId">
+
+        <div class="input-group">
+            <label>Customer Name</label>
+            <input type="text" id="custName" placeholder="e.g. Eco Mart">
+        </div>
+        <div class="input-group">
+            <label>Schedule Date & Time</label>
+            <input type="datetime-local" id="followTime">
+        </div>
+        <div class="input-group">
+            <label>Assigned Owner</label>
+            <select id="owner">
+                <option value="Arif">Arif</option>
+                <!-- Add more owners here as needed -->
+            </select>
+        </div>
+        <div class="input-group">
+            <label>Task Type</label>
+            <select id="taskType">
+                <option value="Call Follow-up">Call Follow-up</option>
+                <option value="Email Follow-up">Email Follow-up</option>
+                <option value="Whatsapp Reminder">Whatsapp Reminder</option>
+                <option value="Site Visit">Site Visit</option>
+                <option value="Quotation Review">Quotation Review</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <label>Notes / Remarks</label>
+            <textarea id="taskNotes" rows="3" placeholder="e.g. Needs pricing for 500 units"
+                      style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;"></textarea>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button id="saveBtn" class="btn btn-primary" style="flex:1" onclick="saveTask()">Save Task</button>
+            <button class="btn" style="background:#f1f5f9;" onclick="toggleModal(false)">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     JAVASCRIPT
+     ================================================================ -->
+<script>
+
+// ─── Config ──────────────────────────────────────────────────────────
+const BOT_TOKEN = '8755259087:AAE_599E9KEG7dYrfm1wdrZYzSUbeivb3mI';
+
+const OWNER_CHAT_IDS = {
+    "Arif":  "689035798",
+    "Admin": "689035798"   // fallback
+};
+
+const COMPLETION_VERBS = {
+    "Call Follow-up":   "Call completed",
+    "Email Follow-up":  "Email sent",
+    "Whatsapp Reminder":"Whatsapp sent",
+    "Site Visit":       "Site visit finished",
+    "Quotation Review": "Quotation reviewed"
+};
+
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+// ─── State ────────────────────────────────────────────────────────────
+let tasks          = JSON.parse(localStorage.getItem('muzamal_tasks_v4'))       || [];
+let historyCount   = parseInt(localStorage.getItem('muzamal_history_count_v4')) || 0;
+let activities     = JSON.parse(localStorage.getItem('muzamal_activities_v4'))  || [];
+let completionChart;
+
+// ─── Init ─────────────────────────────────────────────────────────────
+initChart();
+updateUI();
+setInterval(updateUI, 30000);
+
+// Live filtering
+document.getElementById('searchInput').addEventListener('input',  updateUI);
+document.getElementById('ownerFilter').addEventListener('change', updateUI);
+
+// ─── Chart ────────────────────────────────────────────────────────────
+function initChart() {
+    const ctx = document.getElementById('completionChart').getContext('2d');
+    completionChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Pending', 'Completed'],
+            datasets: [{
+                data: [0, 0],
+                backgroundColor: ['#fbbf24', '#10b981'],
+                borderWidth: 0,
+                cutout: '75%'
+            }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } }, maintainAspectRatio: false }
+    });
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────
+function toggleModal(show) {
+    document.getElementById('taskModal').style.display = show ? 'flex' : 'none';
+    if (!show) resetModal();
+}
+
+function resetModal() {
+    document.getElementById('editTaskId').value  = '';
+    document.getElementById('modalTitle').innerText = 'New Follow-up';
+    document.getElementById('saveBtn').innerText    = 'Save Task';
+    document.getElementById('custName').value    = '';
+    document.getElementById('followTime').value  = '';
+    document.getElementById('owner').value       = 'Arif';
+    document.getElementById('taskType').value    = 'Call Follow-up';
+    document.getElementById('taskNotes').value   = '';
+}
+
+// ─── CRUD ─────────────────────────────────────────────────────────────
+function saveTask() {
+    const name   = document.getElementById('custName').value.trim();
+    const time   = document.getElementById('followTime').value;
+    const owner  = document.getElementById('owner').value;
+    const type   = document.getElementById('taskType').value;
+    const notes  = document.getElementById('taskNotes').value.trim();
+    const editId = document.getElementById('editTaskId').value;
+
+    if (!name || !time || !owner) return alert('Please fill all required fields.');
+
+    if (editId) {
+        const idx = tasks.findIndex(t => t.id == editId);
+        tasks[idx] = { ...tasks[idx], customer: name, time, owner, type, notes };
+        addActivity(name, `Updated: ${type}`, owner);
+    } else {
+        tasks.push({ id: Date.now(), customer: name, time, owner, type, notes, telegramNotified: false });
+        addActivity(name, `Scheduled: ${type}`, owner);
+    }
+
+    toggleModal(false);
+    updateUI();
+}
+
+function editTask(id) {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+
+    document.getElementById('custName').value       = task.customer;
+    document.getElementById('followTime').value     = task.time;
+    document.getElementById('owner').value          = task.owner;
+    document.getElementById('taskType').value       = task.type;
+    document.getElementById('taskNotes').value      = task.notes || '';
+    document.getElementById('editTaskId').value     = task.id;
+    document.getElementById('modalTitle').innerText = 'Edit Follow-up';
+    document.getElementById('saveBtn').innerText    = 'Update Task';
+
+    toggleModal(true);
+}
+
+function deleteTask(id) {
+    if (!confirm('Remove this follow-up? This cannot be undone.')) return;
+    tasks = tasks.filter(t => t.id !== id);
+    updateUI();
+}
+
+function completeTask(id) {
+    const idx = tasks.findIndex(t => t.id === id);
+    if (idx === -1) return;
+    const task = tasks[idx];
+    addActivity(task.customer, COMPLETION_VERBS[task.type] || 'Task completed', task.owner);
+    tasks.splice(idx, 1);
+    historyCount++;
+    updateUI();
+}
+
+// ─── Activity ─────────────────────────────────────────────────────────
+function addActivity(customer, action, owner) {
+    activities.unshift({ customer, action, owner, timestamp: Date.now() });
+    if (activities.length > 5) activities.pop();
+}
+
+function renderActivityList() {
+    const list = document.getElementById('activityList');
+    list.innerHTML = '';
+    activities.forEach(act => {
+        const diff    = Math.floor((Date.now() - act.timestamp) / 60000);
+        const timeStr = diff < 1 ? 'Just now'
+                      : diff < 60   ? `${diff}m ago`
+                      : diff < 1440 ? `${Math.floor(diff / 60)}h ago`
+                      :               `${Math.floor(diff / 1440)}d ago`;
+
+        const item = document.createElement('div');
+        item.className = 'activity-item';
+        item.innerHTML = `
+            <div class="activity-dot"></div>
+            <div class="activity-info">
+                <h5>${act.customer} — ${act.action}</h5>
+                <p>${timeStr} · ${act.owner}</p>
+            </div>`;
+        list.appendChild(item);
+    });
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────
+function getOverdueTime(taskTime) {
+    const diff = Math.floor((new Date() - new Date(taskTime)) / 60000);
+    if (diff < 60)   return `${diff}m overdue`;
+    if (diff < 1440) return `${Math.floor(diff / 60)}h overdue`;
+    return `${Math.floor(diff / 1440)}d overdue`;
+}
+
+// ─── Telegram ─────────────────────────────────────────────────────────
+async function sendTelegramAlert(task) {
+    const chatId  = OWNER_CHAT_IDS[task.owner] || OWNER_CHAT_IDS["Admin"];
+    const message = `⚠️ *3-DAY OVERDUE NOTICE* ⚠️\n\n` +
+                    `*Hello ${task.owner}*,\n` +
+                    `Your follow-up with *${task.customer}* is now overdue by 3+ days.\n\n` +
+                    `*Task:* ${task.type}\n` +
+                    `*Deadline:* ${new Date(task.time).toLocaleString()}`;
+    try {
+        const res = await fetch(`[api.telegram.org](https://api.telegram.org/bot${BOT_TOKEN}/sendMessage)`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'Markdown' })
+        });
+        if (res.ok) console.log(`✅ Alert sent to ${task.owner}`);
+        else        console.error('❌ Telegram API error:', await res.text());
+    } catch (e) {
+        console.error('❌ Network error:', e);
+    }
+}
+
+// ─── Export ───────────────────────────────────────────────────────────
+function exportToExcel() {
+    const ws = XLSX.utils.json_to_sheet(tasks);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sales_Followups');
+    XLSX.writeFile(wb, 'Muzamal_Sales_Report.xlsx');
+}
+
+// ─── Main Render ──────────────────────────────────────────────────────
+function updateUI() {
+    const now          = new Date();
+    const searchTerm   = document.getElementById('searchInput').value.toLowerCase();
+    const selectedOwner = document.getElementById('ownerFilter').value;
+
+    // Check overdue & fire Telegram alerts (single pass)
+    tasks.forEach(task => {
+        const taskDate       = new Date(task.time);
+        const pastDeadlineMs = now - taskDate;
+        if (pastDeadlineMs >= THREE_DAYS_MS && !task.telegramNotified) {
+            sendTelegramAlert(task);
+            task.telegramNotified = true;
+        }
+    });
+
+    // Filter + sort
+    const displayTasks = tasks
+        .filter(task =>
+            task.customer.toLowerCase().includes(searchTerm) &&
+            (selectedOwner === '' || task.owner === selectedOwner)
+        )
+        .sort((a, b) => new Date(a.time) - new Date(b.time));
+
+    // Render table rows
+    let overdueCount = 0;
+    const body = document.getElementById('taskBody');
+    body.innerHTML = '';
+
+    displayTasks.forEach(task => {
+        const taskDate  = new Date(task.time);
+        const isOverdue = taskDate < now;
+        if (isOverdue) overdueCount++;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td style="${isOverdue ? 'color:var(--danger); font-weight:600;' : ''}">
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <span>${taskDate.toLocaleDateString()} | ${taskDate.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    ${isOverdue ? `<span class="overdue-tag" style="width:fit-content; margin-left:0;">${getOverdueTime(task.time)}</span>` : ''}
+                </div>
+            </td>
+            <td style="font-weight:600;">${task.customer}</td>
+            <td>
+                <span style="background:#f1f5f9; padding:6px 10px; border-radius:4px; font-size:0.85rem; display:inline-block; white-space:nowrap;">
+                    ${task.owner}
+                </span>
+            </td>
+            <td>
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                    <div style="font-weight:600; color:var(--text-main); font-size:0.9rem;">${task.type}</div>
+                    <div style="font-size:0.75rem; font-style:italic; color:var(--text-muted); max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                         title="${task.notes || ''}">
+                        ${task.notes || '<span style="opacity:0.5;">No notes</span>'}
+                    </div>
+                </div>
+            </td>
+            <td>
+                <div style="display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+                    <button class="btn" style="background:var(--success); color:white; padding:6px 10px; font-size:0.7rem;" onclick="completeTask(${task.id})">Complete</button>
+                    <button class="btn" style="background:#e2e8f0; color:var(--text-main); padding:6px 10px; font-size:0.7rem;" onclick="editTask(${task.id})">Edit</button>
+                    <button class="btn" style="background:#fee2e2; color:var(--danger); padding:6px 10px; font-size:0.7rem;" onclick="deleteTask(${task.id})">Delete</button>
+                </div>
+            </td>`;
+        body.appendChild(row);
+    });
+
+    // Stats
+    const rate = (tasks.length + historyCount) === 0 ? 0
+               : Math.round((historyCount / (tasks.length + historyCount)) * 100);
+
+    document.getElementById('totalTasks').innerText  = tasks.length;
+    document.getElementById('overdueCount').innerText = overdueCount;
+    document.getElementById('ratePercent').innerText  = rate + '%';
+
+    completionChart.data.datasets[0].data = [tasks.length, historyCount];
+    completionChart.update();
+
+    renderActivityList();
+
+    // Persist
+    localStorage.setItem('muzamal_tasks_v4',         JSON.stringify(tasks));
+    localStorage.setItem('muzamal_activities_v4',    JSON.stringify(activities));
+    localStorage.setItem('muzamal_history_count_v4', historyCount);
+}
+
+</script>
+</body>
+</html>
