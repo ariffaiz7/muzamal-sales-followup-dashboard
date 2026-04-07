@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Muzamal Sales Dashboard v4</title>
-    <script src="[cdnjs.cloudflare.com](https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js)"></script>
-    <script src="[cdn.jsdelivr.net](https://cdn.jsdelivr.net/npm/chart.js)"></script>
-    <link href="[fonts.googleapis.com](https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap)" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         /* ─── Design Tokens ─────────────────────────────────────────── */
         :root {
@@ -267,7 +267,10 @@ document.getElementById('ownerFilter').addEventListener('change', updateUI);
 
 // ─── Chart ────────────────────────────────────────────────────────────
 function initChart() {
-    const ctx = document.getElementById('completionChart').getContext('2d');
+    const canvas = document.getElementById('completionChart');
+    if (!canvas || typeof Chart === 'undefined') return; // Exit if Chart.js didn't load
+
+    const ctx = canvas.getContext('2d');
     completionChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -496,8 +499,11 @@ function updateUI() {
     document.getElementById('overdueCount').innerText = overdueCount;
     document.getElementById('ratePercent').innerText  = rate + '%';
 
-    completionChart.data.datasets[0].data = [tasks.length, historyCount];
-    completionChart.update();
+    // Safety check: Only update chart if it was successfully initialized
+    if (completionChart && typeof completionChart.update === 'function') {
+        completionChart.data.datasets[0].data = [tasks.length, historyCount];
+        completionChart.update();
+    }
 
     renderActivityList();
 
